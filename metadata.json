@@ -1,0 +1,6 @@
+{
+  "name": "Trợ lý Họp AI (AI Meeting Assistant)",
+  "description": "An AI-powered application to automatically transcribe, summarize, and analyze meeting audio/video files in Vietnamese and English.",
+  "requestFramePermissions": [],
+  "prompt": ""
+}
