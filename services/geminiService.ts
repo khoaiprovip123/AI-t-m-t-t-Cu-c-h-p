@@ -1,4 +1,3 @@
-
 import { GoogleGenAI, GenerateContentResponse, Type } from "@google/genai";
 import type { ActionItem, Decision, TranscriptSegment, AnalysisResult } from "../types";
 
@@ -276,12 +275,30 @@ function interleave(audioBuffer: AudioBuffer): Float32Array {
 
 const transcribeAudioChunk = async (base64Data: string, mimeType: string, lang: Language): Promise<RawTranscriptSegment[]> => {
     const t = (lang === 'vi') ? {
-        systemInstruction: `Bạn là một công cụ gỡ băng tự động. Chức năng của bạn là gỡ băng âm thanh thành văn bản và nhận dạng những người nói khác nhau. TOÀN BỘ phản hồi của bạn PHẢI là một mảng JSON thô, hợp lệ, tuân thủ theo schema đã cho. Mỗi đối tượng trong mảng phải chứa 'startSeconds', 'speaker' (được gán nhãn nhất quán là 'Người nói 1', 'Người nói 2', v.v.), và 'text'. Dấu thời gian phải chính xác và theo thứ tự thời gian. TUYỆT ĐỐI KHÔNG lặp lại các đoạn văn bản. KHÔNG thêm bất kỳ văn bản, lời chào, hay bình luận nào khác. Hoàn thành toàn bộ bản ghi. Nếu không có lời nói, hãy trả về một mảng trống [].`,
+        systemInstruction: `Bạn là một chuyên gia gỡ băng âm thanh với độ chính xác tuyệt đối. Nhiệm vụ của bạn là chuyển đổi âm thanh thành văn bản, xác định chính xác người nói và tuân thủ nghiêm ngặt các quy tắc sau đây:
+1.  **ĐỊNH DẠNG JSON:** TOÀN BỘ phản hồi của bạn PHẢI là một mảng JSON thô, hợp lệ duy nhất, tuân thủ schema đã cho. KHÔNG thêm bất kỳ văn bản, lời chào, hay bình luận nào ngoài JSON.
+2.  **CẤU TRÚC DỮ LIỆU:** Mỗi đối tượng trong mảng phải chứa 'startSeconds', 'speaker' và 'text'.
+3.  **NHẬN DIỆN NGƯỜI NÓI:** Gán nhãn người nói một cách nhất quán ('Người nói 1', 'Người nói 2', v.v.). Đừng thay đổi nhãn của một người nói giữa chừng.
+4.  **DẤU THỜI GIAN CHÍNH XÁC:** 'startSeconds' phải thể hiện chính xác thời điểm bắt đầu của lời nói, tính bằng giây, và phải theo thứ tự thời gian tăng dần.
+5.  **TÍNH TOÀN VẸN CỦA NỘI DUNG:**
+    -   Gỡ băng từng từ một cách chính xác. Giữ lại tất cả các từ đệm và thán từ (ví dụ: 'ờ', 'à', 'ừm') để đảm bảo tính nguyên bản.
+    -   TUYỆT ĐỐI KHÔNG được lặp lại bất kỳ đoạn văn bản hoặc câu nào. Mỗi phân đoạn phải là duy nhất và tiếp nối nhau một cách logic.
+    -   TUYỆT ĐỐI KHÔNG được tóm tắt hay diễn giải. Chỉ ghi lại những gì được nói.
+6.  **XỬ LÝ TRƯỜNG HỢP ĐẶC BIỆT:** Nếu không có lời nói trong âm thanh, hãy trả về một mảng trống []. Hoàn thành toàn bộ bản ghi cho đến hết âm thanh.`,
         prompt: `Vui lòng gỡ băng tệp âm thanh tiếng Việt sau và xác định người nói. Tuân thủ nghiêm ngặt định dạng JSON được xác định trong schema.`,
         errorInvalidFormat: "AI đã trả về định dạng bản ghi không hợp lệ.",
         errorGeneric: "Đã xảy ra lỗi không xác định khi gỡ băng."
     } : {
-        systemInstruction: `You are an automated transcription tool. Your function is to transcribe audio to text and identify different speakers. Your ENTIRE response MUST be a single, valid, raw JSON array conforming to the given schema. Each object in the array must contain 'startSeconds', 'speaker' (consistently labeled as 'Speaker 1', 'Speaker 2', etc.), and 'text'. Timestamps must be accurate and chronological. ABSOLUTELY DO NOT repeat text segments. DO NOT add any other text, greetings, or commentary. Complete the entire transcript. If there is no speech, return an empty array [].`,
+        systemInstruction: `You are an expert transcriptionist with absolute precision. Your task is to convert audio to text, accurately identify speakers, and adhere strictly to the following rules:
+1.  **JSON FORMAT:** Your ENTIRE response MUST be a single, valid, raw JSON array conforming to the given schema. DO NOT add any text, greetings, or commentary outside the JSON.
+2.  **DATA STRUCTURE:** Each object in the array must contain 'startSeconds', 'speaker', and 'text'.
+3.  **SPEAKER IDENTIFICATION:** Label speakers consistently ('Speaker 1', 'Speaker 2', etc.). Do not change a speaker's label midway through.
+4.  **ACCURATE TIMESTAMPS:** 'startSeconds' must be precise, in seconds, and strictly chronological.
+5.  **CONTENT INTEGRITY:**
+    -   Transcribe verbatim. Preserve all filler words and utterances (e.g., 'uh', 'ah', 'um') for authenticity.
+    -   ABSOLUTELY DO NOT repeat any text segments or sentences. Each segment must be unique and follow logically.
+    -   ABSOLUTELY DO NOT summarize or paraphrase. Transcribe only what is said.
+6.  **EDGE CASES:** If there is no speech in the audio, return an empty array []. Complete the entire transcript to the end of the audio.`,
         prompt: `Please transcribe the following English audio file and identify the speakers. Strictly adhere to the JSON format defined in the schema.`,
         errorInvalidFormat: "The AI returned an invalid transcript format.",
         errorGeneric: "An unknown error occurred during transcription."
@@ -396,25 +413,31 @@ ${hint}
 
     const t = (lang === 'vi') ? {
         prompt: `
-VAI TRÒ & BỐI CẢNH: Bạn là một trợ lý thư ký và chuyên viên phân tích chuyên nghiệp, tỉ mỉ. Bạn chuyên tạo ra các biên bản họp chính thức, khách quan và có tính hành động cao. Kết quả công việc của bạn được sử dụng cho hồ sơ lưu trữ chính thức và để theo dõi các kết quả quan trọng của bất kỳ loại cuộc họp nào.
+VAI TRÒ & BỐI CẢNH: Bạn là một trợ lý thư ký và chuyên viên phân tích chuyên nghiệp, cực kỳ tỉ mỉ. Nhiệm vụ của bạn là chắt lọc bản ghi cuộc họp thô thành một biên bản họp chính thức, khách quan, và có tính hành động cao, tuân thủ tuyệt đối các quy tắc bất di bất dịch dưới đây.
 
-MỤC TIÊU CHÍNH: Phân tích bản ghi cuộc họp được cung cấp để chuyển đổi nó thành một bản tóm tắt có cấu trúc, khách quan và dựa trên sự thật, tuân thủ tuyệt đối các nguyên tắc bên dưới.
+MỤC TIÊU CHÍNH: Chuyển đổi bản ghi cuộc họp thành một đối tượng JSON có cấu trúc, dựa trên sự thật 100%.
 
-NGUYÊN TẮC XỬ LÝ THÔNG TIN (BẤT DI BẤT DỊCH):
+---
+**QUY TẮC VÀNG (BẮT BUỘC TUÂN THỦ)**
+---
 
-NGUYÊN TẮC #1: ZERO-FABRICATION (KHÔNG BỊA ĐẶT)
-- **Không suy diễn:** Không được tự kết luận hay diễn giải ý định. Nếu A nói "Chúng ta nên làm X", nhưng không có ai xác nhận "Ok, chốt làm X", thì đó là một đề xuất, phải được ghi ở mục 'Ghi chú' (notesAndReferences), TUYỆT ĐỐI không phải là 'Quyết định' (decisions) hay 'Công việc' (actionItems).
-- **Không giả định:** Nếu thiếu thông tin (người phụ trách, thời hạn), phải ghi rõ là null hoặc "[Chưa xác định]" theo yêu cầu của schema. KHÔNG tự điền thông tin.
-- **Không thêm thắt:** Nghiêm cấm việc tạo ra bất kỳ thông tin nào không tồn tại trong bản ghi.
+**1. KHÔNG BỊA ĐẶT (ZERO-FABRICATION):**
+- **Không Suy Diễn:** TUYỆT ĐỐI không diễn giải ý định. Một đề xuất ("Chúng ta nên làm X") không phải là một quyết định trừ khi có sự đồng thuận rõ ràng ("Ok, chốt làm X"). Các đề xuất chưa được chốt phải nằm trong 'Ghi chú' (notesAndReferences).
+- **Không Giả Định:** Nếu thiếu thông tin (người phụ trách, thời hạn), phải dùng giá trị \`null\` hoặc "[Chưa xác định]" theo yêu cầu của schema. KHÔNG tự điền.
+- **Không Thêm Thắt:** Mọi thông tin trong biên bản phải có nguồn gốc trực tiếp từ bản ghi.
 
-NGUYÊN TẮC #2: WORD-FOR-WORD INTEGRITY (TRUNG THỰC VỚI NGUỒN)
-- **Khách quan & Chính xác:** Chỉ ghi lại sự kiện đã xảy ra và đảm bảo 100% độ chính xác của số liệu, tên riêng, chức danh.
-- **Xử lý nhiễu:** Nếu một phần thông tin trong bản ghi không rõ ràng hoặc mâu thuẫn, phải ghi chú là "[Nội dung chưa rõ, cần xác thực lại]" trong phần ghi chú liên quan.
+**2. TRUNG THỰC VỚI NGUỒN (WORD-FOR-WORD INTEGRITY):**
+- **Chỉ Trích Dẫn Sự Thật:** Chỉ ghi lại sự kiện đã xảy ra. Đảm bảo 100% độ chính xác của số liệu, tên riêng, chức danh.
+- **Xử lý Mơ Hồ:** Nếu thông tin không rõ ràng, ghi nhận nó trong 'Ghi chú' kèm theo ghi chú như "[Nội dung chưa rõ, cần xác thực lại]".
 
-NGUYÊN TẮC #3: EFFICIENCY & STRUCTURE (HIỆU QUẢ & CẤU TRÚC)
-- **Súc tích & Tập trung vào kết quả:** Dùng văn phong chuyên nghiệp, ngắn gọn. Luôn ưu tiên ghi nhận các quyết định và hành động cụ thể.
-- **Tóm tắt logic:** Đối với phần \`discussionSummary\`, hãy nhóm các chủ đề liên quan lại với nhau và tóm tắt các lập luận chính, thay vì chỉ liệt kê theo thứ tự thời gian.
-- **Tuân thủ Schema nghiêm ngặt:** Đầu ra cuối cùng PHẢI là một đối tượng JSON hợp lệ duy nhất, tuân thủ \`responseSchema\` đã cho. Không có văn bản thừa, không markdown, không lời giải thích.
+**3. ĐỊNH NGHĨA CHẶT CHẼ:**
+- **Quyết định (Decision):** Phải là một sự thống nhất cuối cùng, được xác nhận bởi các bên liên quan. Tìm các cụm từ như "Chúng ta đã quyết định", "Vậy chốt lại là", "Mọi người đồng ý nhé".
+- **Công việc (Action Item):** Phải là một nhiệm vụ cụ thể, có thể giao phó. Phải xác định rõ hành động cần làm. Nếu có thể, xác định 'owner' và 'deadline'.
+- **Tóm tắt Thảo luận (Discussion Summary):** Phải cô đọng, logic, và **không trùng lặp**. Nhóm các ý tưởng liên quan, loại bỏ các chi tiết không cần thiết và thông tin đã được ghi nhận trong các mục khác (như Quyết định, Công việc). Sử dụng định dạng Markdown đơn giản.
+
+**4. CẤU TRÚC & HIỆU QUẢ (STRUCTURE & EFFICIENCY):**
+- **Văn Phong Chuyên Nghiệp:** Ngắn gọn, súc tích, tập trung vào kết quả.
+- **Tuân Thủ Schema Nghiêm ngặt:** Đầu ra cuối cùng PHẢI là một đối tượng JSON hợp lệ duy nhất, tuân thủ \`responseSchema\` đã cho. Không có văn bản thừa, không markdown, không lời giải thích.
 ${hint ? hintSection : ''}
 ---
 BẢN GHI CUỘC HỌP CHÍNH THỨC CẦN PHÂN TÍCH:
@@ -424,24 +447,30 @@ ${transcript}
         errorGeneric: "Không thể phân tích bản ghi do lỗi không xác định từ dịch vụ AI."
     } : {
         prompt: `
-ROLE & CONTEXT: You are a meticulous and highly professional secretarial assistant and analyst. You specialize in creating formal, objective, and actionable meeting minutes for any type of meeting.
+ROLE & CONTEXT: You are a hyper-meticulous and professional secretarial assistant and analyst. Your mission is to distill a raw meeting transcript into a formal, objective, and actionable meeting minutes document, strictly adhering to the non-negotiable rules below.
 
-PRIMARY OBJECTIVE: Analyze the provided meeting transcript to convert it into a structured, objective, and factual summary, strictly adhering to the principles below.
+PRIMARY OBJECTIVE: Convert the meeting transcript into a structured, 100% fact-based JSON object.
 
-INFORMATION PROCESSING PRINCIPLES (NON-NEGOTIABLE):
+---
+**GOLDEN RULES (MUST BE FOLLOWED)**
+---
 
-PRINCIPLE #1: ZERO-FABRICATION
-- **No Inference:** Do not interpret intentions. If A says, "We should do X," but there is no confirmation, this is a suggestion. It MUST be recorded in 'Notes & References' (notesAndReferences), NOT as a 'Decision' (decisions) or 'Action Item' (actionItems).
-- **No Assumptions:** If information is missing (e.g., owner, deadline), you must use null or "[Unspecified]" as required by the schema. DO NOT invent information.
-- **No Embellishment:** Strictly forbid creating any information that does not exist in the transcript.
+**1. ZERO-FABRICATION:**
+- **No Inference:** ABSOLUTELY do not interpret intent. A suggestion ("We should do X") is not a decision unless there is explicit agreement ("Okay, let's go with X"). Unconfirmed suggestions belong in 'Notes & References'.
+- **No Assumptions:** If information is missing (e.g., owner, deadline), you must use \`null\` or "[Unspecified]" as required by the schema. DO NOT invent information.
+- **No Embellishment:** Every piece of information in the minutes must be directly traceable to the transcript.
 
-PRINCIPLE #2: WORD-FOR-WORD INTEGRITY
-- **Objectivity & Accuracy:** Only record events that occurred and ensure 100% accuracy of figures, proper names, and titles.
-- **Handle Ambiguity:** If part of the transcript is unclear or contradictory, note it as "[Content unclear, needs re-validation]" in the relevant notes section.
+**2. WORD-FOR-WORD INTEGRITY:**
+- **Cite Facts Only:** Only record what happened. Ensure 100% accuracy of figures, proper names, and titles.
+- **Handle Ambiguity:** If information is unclear, capture it in 'Notes & References' with a note like "[Content unclear, needs re-validation]".
 
-PRINCIPLE #3: EFFICIENCY & STRUCTURE
-- **Concise & Outcome-Focused:** Use professional, brief language. Always prioritize recording concrete decisions and action items.
-- **Logical Summary:** For the \`discussionSummary\`, group related topics and summarize key arguments, rather than listing points chronologically.
+**3. STRICT DEFINITIONS:**
+- **Decision:** Must be a final, confirmed agreement. Look for phrases like "We've decided," "So it's settled," "Everyone agrees."
+- **Action Item:** Must be a specific, delegable task. The action to be taken must be clear. If possible, identify an 'owner' and 'deadline'.
+- **Discussion Summary:** Must be concise, logical, and **non-redundant**. Group related ideas, eliminate fluff, and exclude information already captured in other sections (like Decisions or Action Items). Use simple Markdown.
+
+**4. STRUCTURE & EFFICIENCY:**
+- **Professional Tone:** Be brief, concise, and outcome-focused.
 - **Strict Schema Adherence:** The final output MUST be a single, valid JSON object that strictly conforms to the provided \`responseSchema\`. No extra text, no markdown, no explanations.
 ${hint ? hintSection : ''}
 ---
